@@ -1,0 +1,6 @@
+{
+  "name": "Konfeksi Bunda Icha",
+  "description": "Sistem Manajemen Konfeksi offline dengan IndexedDB, fitur POS, Inventaris, Produksi, dan Penggajian.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
