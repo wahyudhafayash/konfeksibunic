@@ -168,8 +168,11 @@ export default function TailorView({
 
   async function handleTakeJob(e: React.FormEvent) {
     e.preventDefault();
-    if (!activeTailor || !takeJobForm.poItemId || takeJobForm.qtyTaken <= 0)
-      return;
+    if (!activeTailor) return;
+    if (!takeJobForm.poItemId)
+      return alert("Silakan pilih item PO (Sisa Bahan) terlebih dahulu.");
+    if (takeJobForm.qtyTaken <= 0)
+      return alert("Kuantitas ambil harus lebih dari 0.");
 
     const poItem = poItems.find((i) => i.id === takeJobForm.poItemId);
     const existingJobsForItem = jobs.filter(
@@ -920,24 +923,11 @@ export default function TailorView({
                     <div className="p-8 overflow-y-auto custom-scrollbar">
                       {isTakeJobOpen && (
                         <form onSubmit={handleTakeJob} className="space-y-6">
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                              Pilih Item PO
+                              Pilih Item PO (Sisa Bahan)
                             </label>
-                            <select
-                              value={takeJobForm.poItemId}
-                              onChange={(e) =>
-                                setTakeJobForm({
-                                  ...takeJobForm,
-                                  poItemId: Number(e.target.value),
-                                })
-                              }
-                              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:outline-none transition-all"
-                              required
-                            >
-                              <option value={0} disabled>
-                                -- Pilih Barang --
-                              </option>
+                            <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                               {poItems.map((item) => {
                                 const po = pos.find((p) => p.id === item.poId);
                                 if (
@@ -952,14 +942,54 @@ export default function TailorView({
                                   .reduce((sum, j) => sum + j.qtyTaken, 0);
                                 const remaining = item.qty - taken;
                                 if (remaining <= 0) return null;
+
+                                const isSelected =
+                                  takeJobForm.poItemId === item.id;
+
                                 return (
-                                  <option key={item.id} value={item.id}>
-                                    {getPoItemLabel(item.id!)} ({remaining} pcs
-                                    avail)
-                                  </option>
+                                  <motion.div
+                                    whileHover={{ scale: 1.01 }}
+                                    whileTap={{ scale: 0.99 }}
+                                    key={item.id}
+                                    onClick={() =>
+                                      setTakeJobForm({
+                                        ...takeJobForm,
+                                        poItemId: item.id!,
+                                      })
+                                    }
+                                    className={`flex items-center gap-4 p-5 rounded-3xl border-2 transition-all cursor-pointer ${isSelected ? "bg-indigo-50 border-indigo-500 ring-4 ring-indigo-50" : "bg-slate-50 border-slate-100 hover:border-indigo-200"}`}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate mb-0.5">
+                                        {po.poNumber}
+                                      </p>
+                                      <h4 className="text-base font-black text-slate-900 truncate tracking-tight">
+                                        {item.itemName}
+                                      </h4>
+                                      <div className="flex gap-2 mt-1">
+                                        <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[9px] font-bold text-slate-500 uppercase">
+                                          {item.color}
+                                        </span>
+                                        <span className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[9px] font-bold text-slate-500 uppercase">
+                                          {item.size}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none mb-1">
+                                        Sisa
+                                      </p>
+                                      <p className="text-xl font-black text-slate-900 leading-none">
+                                        {remaining}{" "}
+                                        <span className="text-[10px] text-slate-400">
+                                          pcs
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </motion.div>
                                 );
                               })}
-                            </select>
+                            </div>
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
