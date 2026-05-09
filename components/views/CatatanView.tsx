@@ -17,16 +17,20 @@ export default function CatatanView({
 }: {
   currentUsername?: string;
 }) {
-  const [password, setPassword] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [content, setContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   const catatanRecord = useLiveQuery(
     () => db.catatan.toCollection().first(),
     []
   );
+  const settings = useLiveQuery(() => db.settings.toArray(), []) || [];
+  const notesPasswordSetting = settings.find((s) => s.key === "notes_password");
 
   useEffect(() => {
     if (catatanRecord && !content) {
@@ -34,10 +38,21 @@ export default function CatatanView({
     }
   }, [catatanRecord]);
 
+  // Initializing default password if not exists
+  useEffect(() => {
+    if (settings.length > 0 && !notesPasswordSetting) {
+      db.settings.add({
+        key: "notes_password",
+        value: "adminkonfeksibunic2026",
+      });
+    }
+  }, [settings, notesPasswordSetting]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Keeping this as a second layer of security for "Secret Notes"
-    if (password === "adminkonfeksibunic2026") {
+    const correctPassword =
+      notesPasswordSetting?.value || "adminkonfeksibunic2026";
+    if (passwordInput === correctPassword) {
       setIsAuthenticated(true);
     } else {
       alert("Password kunci catatan salah!");
@@ -57,6 +72,25 @@ export default function CatatanView({
     setIsSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword) return;
+    if (notesPasswordSetting && notesPasswordSetting.id) {
+      await db.settings.update(notesPasswordSetting.id, {
+        value: newPassword,
+        updatedBy: currentUsername,
+      });
+    } else {
+      await db.settings.add({
+        key: "notes_password",
+        value: newPassword,
+        updatedBy: currentUsername,
+      });
+    }
+    alert("Password berhasil diubah!");
+    setShowPasswordChange(false);
+    setNewPassword("");
   };
 
   if (!isAuthenticated) {
@@ -91,8 +125,8 @@ export default function CatatanView({
                 </label>
                 <input
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-base font-black focus:bg-white focus:border-indigo-500 focus:outline-none transition-all"
                   placeholder="••••••••"
                   required
@@ -127,8 +161,11 @@ export default function CatatanView({
                 Encrypted Area
               </span>
               <div className="w-1 h-1 rounded-full bg-slate-200"></div>
-              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                Auto-backup enabled
+              <p
+                className="text-slate-400 font-bold text-[10px] uppercase tracking-widest cursor-pointer hover:text-indigo-600 transition-colors"
+                onClick={() => setShowPasswordChange(!showPasswordChange)}
+              >
+                Change Password
               </p>
             </div>
           </div>
@@ -145,6 +182,39 @@ export default function CatatanView({
           </button>
         </div>
       </div>
+
+      {showPasswordChange && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="bg-indigo-50 border-2 border-indigo-100 p-6 rounded-[2.5rem] flex flex-col sm:flex-row items-end gap-4"
+        >
+          <div className="flex-1 w-full">
+            <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 ml-1">
+              Password Baru
+            </label>
+            <input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-2 text-sm font-bold focus:border-indigo-500 outline-none transition-all"
+              placeholder="Masukkan password baru..."
+            />
+          </div>
+          <button
+            onClick={handleChangePassword}
+            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
+          >
+            Update Password
+          </button>
+          <button
+            onClick={() => setShowPasswordChange(false)}
+            className="bg-slate-200 text-slate-500 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-300 transition-all active:scale-95"
+          >
+            Batal
+          </button>
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

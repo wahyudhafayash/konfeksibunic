@@ -167,6 +167,7 @@ export default function SalaryView({
     try {
       const paymentRecord: SalaryPayment = {
         tailorId,
+        tailorName: stats.tailorName,
         date: new Date().toISOString(),
         totalQty: stats.totalQty,
         totalWage: stats.totalWage,
@@ -182,6 +183,15 @@ export default function SalaryView({
         createdBy: currentUsername,
       };
       const paymentId = await db.salaryPayments.add(paymentRecord);
+
+      // Arasip Gaji
+      await db.archiveSalaries.add({
+        originalId: paymentId,
+        data: paymentRecord,
+        archivedAt: new Date().toISOString(),
+        archivedBy: currentUsername || "System",
+      });
+
       const submissionUpdates = subs.map((s) => ({
         key: s.id!,
         changes: { isPaid: true, paymentId, updatedBy: currentUsername },
@@ -202,6 +212,30 @@ export default function SalaryView({
       if (kasbonUpdates.length > 0) await db.kasbons.bulkUpdate(kasbonUpdates);
       if (adjustmentUpdates.length > 0)
         await db.manualAdjustments.bulkUpdate(adjustmentUpdates);
+
+      // Update Active Tabungan Summary in Mongo
+      if (stats.totalTabungan > 0) {
+        const activeTabRes = await db.activeTabungan.toArray();
+        const existingSummary = activeTabRes.find(
+          (a) => a.tailorId === tailorId
+        );
+        if (!existingSummary) {
+          await db.activeTabungan.add({
+            tailorId,
+            tailorName: stats.tailorName,
+            totalIn: stats.totalTabungan,
+            totalOut: 0,
+            balance: stats.totalTabungan,
+            lastUpdated: new Date().toISOString(),
+          });
+        } else {
+          await db.activeTabungan.update(existingSummary.id!, {
+            totalIn: (existingSummary.totalIn || 0) + stats.totalTabungan,
+            balance: (existingSummary.balance || 0) + stats.totalTabungan,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+      }
 
       alert("Gaji berhasil dibayarkan dan telah diarsipkan.");
       setConfirmPaymentData(null);
@@ -320,7 +354,7 @@ export default function SalaryView({
             <Wallet size={120} />
           </div>
           <p className="text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] mb-2">
-            Gaji Yang Harus Dibayar
+            Estimasi Utang Gaji
           </p>
           <h3 className="text-3xl font-black text-slate-900 tabular-nums">
             {displayAmount(unpaidTotalAll, "globalUnpaid", "text-rose-600")}

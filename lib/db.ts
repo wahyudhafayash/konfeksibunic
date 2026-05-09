@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 
 export interface PO {
   id?: number;
@@ -38,6 +38,7 @@ export interface Tailor {
 export interface ManualAdjustment {
   id?: number;
   tailorId: number;
+  tailorName?: string;
   amount: number;
   date: string;
   notes: string;
@@ -50,10 +51,11 @@ export interface ManualAdjustment {
 export interface Kasbon {
   id?: number;
   tailorId: number;
+  tailorName?: string;
   amount: number;
   date: string;
   notes: string;
-  isPaid: boolean; 
+  isPaid: boolean;
   paymentId?: number;
   createdBy?: string;
   updatedBy?: string;
@@ -73,6 +75,7 @@ export interface GradeRule {
 export interface SewingJob {
   id?: number;
   tailorId: number;
+  tailorName?: string;
   poItemId: number;
   qtyTaken: number;
   qtySubmitted: number;
@@ -80,7 +83,7 @@ export interface SewingJob {
   tabunganPerPcs: number;
   dateTaken: string;
   productionNumber?: string;
-  status: 'Proses' | 'Selesai';
+  status: "Proses" | "Selesai";
   createdBy?: string;
   updatedBy?: string;
 }
@@ -89,8 +92,9 @@ export interface SewingSubmission {
   id?: number;
   jobId: number;
   tailorId: number;
+  tailorName?: string;
   qtySubmitted: number; // This can remain as the nominal qty (e.g., 2), and partType determines if it's Set, Inner, or Outer.
-  partType?: 'Set' | 'Inner' | 'Outer';
+  partType?: "Set" | "Inner" | "Outer";
   wageTotal: number;
   tabunganTotal: number;
   dateSubmitted: string;
@@ -103,6 +107,7 @@ export interface SewingSubmission {
 export interface SalaryPayment {
   id?: number;
   tailorId: number;
+  tailorName?: string;
   date: string;
   totalQty: number;
   totalWage: number;
@@ -120,6 +125,7 @@ export interface SalaryPayment {
 export interface TabunganWithdrawal {
   id?: number;
   tailorId: number;
+  tailorName?: string;
   amount: number;
   date: string;
   createdBy?: string;
@@ -152,46 +158,115 @@ export interface Catatan {
   updatedBy?: string;
 }
 
+export interface AppLog {
+  id?: number;
+  date: string;
+  user: string;
+  action: string;
+  details: string;
+  table?: string;
+}
+
+export interface Setting {
+  id?: number;
+  key: string;
+  value: any;
+  updatedBy?: string;
+}
+
+export interface ActiveTabungan {
+  id?: number;
+  tailorId: number;
+  tailorName: string;
+  totalIn: number;
+  totalOut: number;
+  balance: number;
+  lastUpdated: string;
+}
+
+export interface ArchivePO {
+  id?: number;
+  originalId: number;
+  data: PO;
+  archivedAt: string;
+  archivedBy: string;
+}
+
+export interface ArchiveSalary {
+  id?: number;
+  originalId: number;
+  data: SalaryPayment;
+  archivedAt: string;
+  archivedBy: string;
+}
+
+export interface ArchiveTabungan {
+  id?: number;
+  originalId: number;
+  data: TabunganWithdrawal;
+  archivedAt: string;
+  archivedBy: string;
+}
+
+export interface ArchiveTailor {
+  id?: number;
+  originalId: number;
+  data: Tailor;
+  archivedAt: string;
+  archivedBy: string;
+}
+
 // export class AppDB extends Dexie {
 // removed dexie export
 
 const listeners = new Set<() => void>();
 
 export function triggerDbUpdate() {
-   listeners.forEach(fn => fn());
+  listeners.forEach((fn) => fn());
 }
 
 // Temporary useLiveQuery replica
-export function useLiveQuery<T>(querier: () => Promise<T>, deps: any[]): T | undefined {
-   const [data, setData] = useState<T | undefined>(undefined);
+export function useLiveQuery<T>(
+  querier: () => Promise<T>,
+  deps: any[]
+): T | undefined {
+  const [data, setData] = useState<T | undefined>(undefined);
 
-   useEffect(() => {
-     let isMounted = true;
-     const fetchData = () => {
-        querier().then(res => {
-           if (isMounted) setData(res);
-        }).catch(err => {
-           // use console.warn to avoid triggering Next.js Error Overlay
-           console.warn('DB LiveQuery warning:', err.message);
+  useEffect(() => {
+    let isMounted = true;
+    const fetchData = () => {
+      querier()
+        .then((res) => {
+          if (isMounted) setData(res);
+        })
+        .catch((err) => {
+          // use console.warn to avoid triggering Next.js Error Overlay
+          console.warn("DB LiveQuery warning:", err.message);
         });
-     };
-     
-     fetchData();
-     listeners.add(fetchData);
-     return () => {
-        isMounted = false;
-        listeners.delete(fetchData);
-     };
-   // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, deps);
+    };
 
-   return data;
+    fetchData();
+    listeners.add(fetchData);
+    return () => {
+      isMounted = false;
+      listeners.delete(fetchData);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
+  return data;
 }
 
 class ApiTable<T> {
   constructor(public tableName: string) {}
 
-  private async fetchApi(method: string, action?: string, body?: any, id?: number, extraParams = '') {
+  private async fetchApi(
+    method: string,
+    action?: string,
+    body?: any,
+    id?: number,
+    extraParams = ""
+  ) {
     let url = `/api/db?table=${this.tableName}`;
     if (action) url += `&action=${action}`;
     if (id !== undefined) url += `&id=${id}`;
@@ -199,60 +274,62 @@ class ApiTable<T> {
 
     const options: RequestInit = { method };
     if (body) {
-      options.headers = { 'Content-Type': 'application/json' };
+      options.headers = { "Content-Type": "application/json" };
       options.body = JSON.stringify(body);
     }
 
     try {
       const res = await fetch(url, options);
       if (!res.ok) {
-         let errorMsg = res.statusText;
-         try {
-            const errData = await res.json();
-            if (errData.error) errorMsg = errData.error;
-         } catch (e) {}
-         console.warn(`API error (${this.tableName}): ${errorMsg}`);
-         throw new Error(`API error: ${errorMsg}`);
+        let errorMsg = res.statusText;
+        try {
+          const errData = await res.json();
+          if (errData.error) errorMsg = errData.error;
+        } catch (e) {}
+        console.warn(`API error (${this.tableName}): ${errorMsg}`);
+        throw new Error(`API error: ${errorMsg}`);
       }
       return await res.json();
     } catch (e) {
-       if (method === 'GET') return [];
-       throw e;
+      if (method === "GET") return [];
+      throw e;
     }
   }
 
   async toArray(): Promise<T[]> {
-    return this.fetchApi('GET');
+    return this.fetchApi("GET");
   }
 
   async add(item: T): Promise<number> {
-    const res = await this.fetchApi('POST', '', item);
+    const res = await this.fetchApi("POST", "", item);
     triggerDbUpdate();
     return res.id;
   }
 
   async update(id: number, changes: Partial<T>): Promise<void> {
-    await this.fetchApi('PUT', '', changes, id);
+    await this.fetchApi("PUT", "", changes, id);
     triggerDbUpdate();
   }
 
   async delete(id: number): Promise<void> {
-    await this.fetchApi('DELETE', '', undefined, id);
+    await this.fetchApi("DELETE", "", undefined, id);
     triggerDbUpdate();
   }
 
   async bulkAdd(items: T[]): Promise<void> {
-    await this.fetchApi('POST', 'bulkAdd', items);
+    await this.fetchApi("POST", "bulkAdd", items);
     triggerDbUpdate();
   }
 
-  async bulkUpdate(updates: {key: number, changes: Partial<T>}[]): Promise<void> {
-    await this.fetchApi('POST', 'bulkUpdate', updates);
+  async bulkUpdate(
+    updates: { key: number; changes: Partial<T> }[]
+  ): Promise<void> {
+    await this.fetchApi("POST", "bulkUpdate", updates);
     triggerDbUpdate();
   }
 
   async bulkDelete(ids: number[]): Promise<void> {
-    await this.fetchApi('POST', 'bulkDelete', ids);
+    await this.fetchApi("POST", "bulkDelete", ids);
     triggerDbUpdate();
   }
 
@@ -270,14 +347,17 @@ class ApiTable<T> {
       first: async () => {
         const data = await this.toArray();
         return data[0];
-      }
+      },
     };
   }
 }
 
 class OrderedApiTable<T> {
   private isReversed = false;
-  constructor(public tableName: string, public field: string) {}
+  constructor(
+    public tableName: string,
+    public field: string
+  ) {}
 
   reverse() {
     this.isReversed = true;
@@ -286,15 +366,17 @@ class OrderedApiTable<T> {
 
   async toArray(): Promise<T[]> {
     try {
-      const res = await fetch(`/api/db?table=${this.tableName}&sortBy=${this.field}&reverse=${this.isReversed}`);
+      const res = await fetch(
+        `/api/db?table=${this.tableName}&sortBy=${this.field}&reverse=${this.isReversed}`
+      );
       if (!res.ok) {
-         let errorMsg = res.statusText;
-         try {
-            const errData = await res.json();
-            if (errData.error) errorMsg = errData.error;
-         } catch (e) {}
-         console.warn(`API error (${this.tableName}): ${errorMsg}`);
-         throw new Error(`API error: ${errorMsg}`);
+        let errorMsg = res.statusText;
+        try {
+          const errData = await res.json();
+          if (errData.error) errorMsg = errData.error;
+        } catch (e) {}
+        console.warn(`API error (${this.tableName}): ${errorMsg}`);
+        throw new Error(`API error: ${errorMsg}`);
       }
       return await res.json();
     } catch (e) {
@@ -304,17 +386,24 @@ class OrderedApiTable<T> {
 }
 
 export const db = {
-  pos: new ApiTable<PO>('pos'),
-  poItems: new ApiTable<POItem>('poItems'),
-  tailors: new ApiTable<Tailor>('tailors'),
-  sewingJobs: new ApiTable<SewingJob>('sewingJobs'),
-  sewingSubmissions: new ApiTable<SewingSubmission>('sewingSubmissions'),
-  kasbons: new ApiTable<Kasbon>('kasbons'),
-  manualAdjustments: new ApiTable<ManualAdjustment>('manualAdjustments'),
-  gradeRules: new ApiTable<GradeRule>('gradeRules'),
-  salaryPayments: new ApiTable<SalaryPayment>('salaryPayments'),
-  tabunganWithdrawals: new ApiTable<TabunganWithdrawal>('tabunganWithdrawals'),
-  inhouseWorkers: new ApiTable<InhouseWorker>('inhouseWorkers'),
-  inhouseSalaries: new ApiTable<InhouseSalary>('inhouseSalaries'),
-  catatan: new ApiTable<Catatan>('catatan')
+  pos: new ApiTable<PO>("pos"),
+  poItems: new ApiTable<POItem>("poItems"),
+  tailors: new ApiTable<Tailor>("tailors"),
+  sewingJobs: new ApiTable<SewingJob>("sewingJobs"),
+  sewingSubmissions: new ApiTable<SewingSubmission>("sewingSubmissions"),
+  kasbons: new ApiTable<Kasbon>("kasbons"),
+  manualAdjustments: new ApiTable<ManualAdjustment>("manualAdjustments"),
+  gradeRules: new ApiTable<GradeRule>("gradeRules"),
+  salaryPayments: new ApiTable<SalaryPayment>("salaryPayments"),
+  tabunganWithdrawals: new ApiTable<TabunganWithdrawal>("tabunganWithdrawals"),
+  inhouseWorkers: new ApiTable<InhouseWorker>("inhouseWorkers"),
+  inhouseSalaries: new ApiTable<InhouseSalary>("inhouseSalaries"),
+  catatan: new ApiTable<Catatan>("catatan"),
+  appLogs: new ApiTable<AppLog>("appLogs"),
+  settings: new ApiTable<Setting>("settings"),
+  activeTabungan: new ApiTable<ActiveTabungan>("activeTabungan"),
+  archivePOs: new ApiTable<ArchivePO>("archivePOs"),
+  archiveSalaries: new ApiTable<ArchiveSalary>("archiveSalaries"),
+  archiveTabungan: new ApiTable<ArchiveTabungan>("archiveTabungan"),
+  archiveTailors: new ApiTable<ArchiveTailor>("archiveTailors"),
 };

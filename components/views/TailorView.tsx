@@ -152,6 +152,12 @@ export default function TailorView({
   async function confirmDeleteTailor() {
     if (!tailorToDelete) return;
     try {
+      await db.archiveTailors.add({
+        originalId: tailorToDelete.id!,
+        data: tailorToDelete,
+        archivedAt: new Date().toISOString(),
+        archivedBy: currentUsername || "System",
+      });
       await db.tailors.update(tailorToDelete.id!, { status: "Dihapus" });
       if (activeTailor === tailorToDelete.id!) setActiveTailor(null);
     } catch (error) {
@@ -183,6 +189,7 @@ export default function TailorView({
 
     await db.sewingJobs.add({
       tailorId: activeTailor,
+      tailorName: selectedTailor?.name,
       poItemId: takeJobForm.poItemId,
       qtyTaken: takeJobForm.qtyTaken,
       qtySubmitted: 0,
@@ -257,6 +264,7 @@ export default function TailorView({
     await db.sewingSubmissions.add({
       jobId: job.id!,
       tailorId: job.tailorId,
+      tailorName: selectedTailor?.name,
       qtySubmitted: submitJobForm.qtySubmitted,
       partType: submitJobForm.partType,
       wageTotal: wageTotal,
@@ -283,6 +291,7 @@ export default function TailorView({
     if (!activeTailor || kasbonForm.amount <= 0) return;
     await db.kasbons.add({
       tailorId: activeTailor,
+      tailorName: selectedTailor?.name,
       amount: kasbonForm.amount,
       notes: kasbonForm.notes,
       date: new Date().toISOString(),
@@ -298,6 +307,7 @@ export default function TailorView({
     if (!activeTailor || !manualAdjustmentForm.amount) return;
     await db.manualAdjustments.add({
       tailorId: activeTailor,
+      tailorName: selectedTailor?.name,
       amount: manualAdjustmentForm.amount,
       notes: manualAdjustmentForm.notes || "",
       date: new Date().toISOString(),
@@ -369,10 +379,10 @@ export default function TailorView({
   }
 
   return (
-    <div className="flex flex-col md:flex-row gap-8 h-full min-h-[80vh] relative">
+    <div className="flex flex-col md:flex-row gap-4 lg:gap-6 h-full min-h-full max-h-full relative overflow-hidden">
       {/* Kiri: Daftar Penjahit (Hidden on mobile when a tailor is selected) */}
       <div
-        className={`${activeTailor ? "hidden md:flex" : "flex"} w-full md:w-96 flex-col h-full overflow-hidden shrink-0 transition-all`}
+        className={`${activeTailor ? "hidden md:flex" : "flex"} w-full md:w-80 lg:w-96 flex-col h-full overflow-y-auto shrink-0 transition-all custom-scrollbar pr-2 pb-24`}
       >
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
@@ -486,7 +496,7 @@ export default function TailorView({
           )}
         </AnimatePresence>
 
-        <div className="flex-1 overflow-y-auto w-full pr-2 custom-scrollbar space-y-3">
+        <div className="flex-1 overflow-visible w-full pr-2 space-y-3">
           {filteredTailors.length === 0 && (
             <div className="text-center py-12 opacity-40">
               <User size={48} className="mx-auto mb-2" />
@@ -564,7 +574,7 @@ export default function TailorView({
 
       {/* Kanan: Detail Penjahit (Visible on mobile when tailor selected) */}
       <div
-        className={`${activeTailor ? "flex" : "hidden md:flex"} flex-1 bg-white border border-slate-200 rounded-[3rem] shadow-sm flex-col min-h-100 overflow-hidden relative`}
+        className={`${activeTailor ? "flex" : "hidden md:flex"} flex-1 bg-white border border-slate-200 rounded-[3rem] shadow-sm flex-col h-full overflow-y-auto relative custom-scrollbar pb-24`}
       >
         {!activeTailor ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 text-center">
@@ -583,7 +593,7 @@ export default function TailorView({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex flex-col h-full overflow-hidden"
+            className="flex flex-col h-full"
           >
             <div className="p-8 border-b border-slate-100 flex flex-col gap-6">
               <div className="flex justify-between items-start">
@@ -652,12 +662,6 @@ export default function TailorView({
                   <FilePlus2 size={18} /> Ambil Jahitan
                 </button>
                 <button
-                  onClick={() => setIsSubmitJobOpen(true)}
-                  className="bg-emerald-600 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/10 flex items-center justify-center gap-2 active:scale-95 flex-1 lg:flex-none"
-                >
-                  <FileOutput size={18} /> Setoran Finish
-                </button>
-                <button
                   onClick={() => setIsKasbonFormOpen(true)}
                   className="bg-amber-100 text-amber-700 border border-amber-200 px-6 py-3 rounded-2xl text-sm font-bold hover:bg-amber-200 transition-all flex items-center justify-center gap-2 flex-1 lg:flex-none"
                 >
@@ -702,7 +706,7 @@ export default function TailorView({
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto bg-slate-50/30 custom-scrollbar relative">
+            <div className="flex-1 overflow-visible bg-slate-50/30 relative">
               {tailorJobs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-64 text-slate-400 opacity-60">
                   <Activity size={48} className="mb-4" />
@@ -713,8 +717,7 @@ export default function TailorView({
               ) : (
                 <div className="p-8">
                   <div className="grid grid-cols-1 gap-4">
-                    {[...tailorJobs]
-                      .reverse()
+                    {tailorJobs
                       .slice(0, showAllJobsHistory ? undefined : 5)
                       .map((j) => {
                         const progress = Math.round(
@@ -759,7 +762,17 @@ export default function TailorView({
                           <motion.div
                             layout
                             key={j.id}
-                            className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all group"
+                            onClick={() => {
+                              if (j.status !== "Selesai") {
+                                setSubmitJobForm({
+                                  jobId: j.id!,
+                                  partType: "Set",
+                                  qtySubmitted: 0,
+                                });
+                                setIsSubmitJobOpen(true);
+                              }
+                            }}
+                            className={`bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm hover:shadow-md transition-all group ${j.status !== "Selesai" ? "cursor-pointer hover:border-emerald-200 hover:ring-2 hover:ring-emerald-500/20" : ""}`}
                           >
                             <div className="flex flex-col lg:flex-row justify-between gap-6">
                               <div className="flex-1">
@@ -876,7 +889,7 @@ export default function TailorView({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] z-20 flex items-center justify-center p-6"
+                  className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] z-20 flex items-start sm:items-center justify-center p-6 pt-8 sm:pt-6"
                 >
                   <motion.div
                     initial={{ scale: 0.95, y: 20 }}
@@ -1035,53 +1048,37 @@ export default function TailorView({
                         <form onSubmit={handleSubmitJob} className="space-y-6">
                           <div className="space-y-2">
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                              Pilih Job Berjalan
+                              Job yang Disetor
                             </label>
-                            <select
-                              value={submitJobForm.jobId}
-                              onChange={(e) =>
-                                setSubmitJobForm({
-                                  ...submitJobForm,
-                                  jobId: Number(e.target.value),
-                                })
-                              }
-                              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-sm font-bold focus:bg-white focus:border-indigo-500 focus:outline-none transition-all"
-                              required
-                            >
-                              <option value={0} disabled>
-                                -- Pilih Job --
-                              </option>
-                              {tailorJobs
-                                .filter((j) => j.status !== "Selesai")
-                                .map((j) => {
-                                  const jobSubs = submissions.filter(
-                                    (s) => s.jobId === j.id
-                                  );
-                                  const prevSet = jobSubs
-                                    .filter(
-                                      (s) => !s.partType || s.partType === "Set"
-                                    )
-                                    .reduce((a, s) => a + s.qtySubmitted, 0);
-                                  const prevInner =
-                                    jobSubs
-                                      .filter((s) => s.partType === "Inner")
-                                      .reduce((a, s) => a + s.qtySubmitted, 0) +
-                                    prevSet;
-                                  const prevOuter =
-                                    jobSubs
-                                      .filter((s) => s.partType === "Outer")
-                                      .reduce((a, s) => a + s.qtySubmitted, 0) +
-                                    prevSet;
-                                  const remInner = j.qtyTaken - prevInner;
-                                  const remOuter = j.qtyTaken - prevOuter;
-                                  return (
-                                    <option key={j.id} value={j.id}>
-                                      {getPoItemLabel(j.poItemId)} - Sisa (I:{" "}
-                                      {remInner}, O: {remOuter})
-                                    </option>
-                                  );
-                                })}
-                            </select>
+                            <div className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 text-sm font-bold text-slate-700">
+                              {(() => {
+                                const j = tailorJobs.find(
+                                  (x) => x.id === submitJobForm.jobId
+                                );
+                                if (!j) return "-";
+                                const jobSubs = submissions.filter(
+                                  (s) => s.jobId === j.id
+                                );
+                                const prevSet = jobSubs
+                                  .filter(
+                                    (s) => !s.partType || s.partType === "Set"
+                                  )
+                                  .reduce((a, s) => a + s.qtySubmitted, 0);
+                                const prevInner =
+                                  jobSubs
+                                    .filter((s) => s.partType === "Inner")
+                                    .reduce((a, s) => a + s.qtySubmitted, 0) +
+                                  prevSet;
+                                const prevOuter =
+                                  jobSubs
+                                    .filter((s) => s.partType === "Outer")
+                                    .reduce((a, s) => a + s.qtySubmitted, 0) +
+                                  prevSet;
+                                const remInner = j.qtyTaken - prevInner;
+                                const remOuter = j.qtyTaken - prevOuter;
+                                return `${getPoItemLabel(j.poItemId)} - Sisa (I: ${remInner}, O: ${remOuter})`;
+                              })()}
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest">

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { db, useLiveQuery } from "@/lib/db";
+import { useState, useEffect } from "react";
+import { db, useLiveQuery, TabunganWithdrawal } from "@/lib/db";
 import {
   PiggyBank,
   Search,
@@ -14,6 +14,7 @@ import {
   X,
   CheckCircle2,
   ChevronRight,
+  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -25,13 +26,12 @@ export default function TabunganView({
   currentUsername?: string;
 }) {
   const tailors = useLiveQuery(() => db.tailors.toArray(), []) || [];
-  const submissions =
-    useLiveQuery(() => db.sewingSubmissions.toArray(), []) || [];
-  const withdrawals =
-    useLiveQuery(
-      () => db.tabunganWithdrawals.orderBy("date").reverse().toArray(),
-      []
-    ) || [];
+
+  // Data exclusively from MongoDB
+  const archiveTabungan =
+    useLiveQuery(() => db.archiveTabungan.toArray(), []) || [];
+  const activeTabunganMongo =
+    useLiveQuery(() => db.activeTabungan.toArray(), []) || [];
 
   const [searchTerm, setSearchTerm] = useState("");
   const [showAmountsGlobal, setShowAmountsGlobal] = useState(false);
@@ -44,56 +44,94 @@ export default function TabunganView({
     tailorName: string;
   } | null>(null);
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Filter Active Tabungan from MongoDB
+  const filtered = activeTabunganMongo.filter(
+    (a) =>
+      (a.tailorName || "").toLowerCase().includes(searchTerm.toLowerCase()) &&
+      a.balance > 0
+  );
+
   const toggleVisibility = (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     setVisibleAmounts((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const balances = tailors
-    .filter((t) => t.status !== "Dihapus")
-    .map((t) => {
-      const subSum = submissions
-        .filter((s) => Number(s.tailorId) === Number(t.id))
-        .reduce((sum, s) => sum + (Number(s.tabunganTotal) || 0), 0);
-      const wdSum = withdrawals
-        .filter((w) => Number(w.tailorId) === Number(t.id))
-        .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
-      return {
-        tailor: t,
-        balance: subSum - wdSum,
-        totalIn: subSum,
-        totalOut: wdSum,
-      };
-    })
-    .filter((b) => b.balance > 0);
-
-  const filtered = balances.filter((b) =>
-    (b.tailor.name || "").toLowerCase().includes(searchTerm.toLowerCase())
+  const archivedWithdrawals = [...archiveTabungan].sort(
+    (a, b) =>
+      new Date(b.archivedAt).getTime() - new Date(a.archivedAt).getTime()
   );
 
   async function handleWithdraw() {
-    if (!confirmWithdraw) return;
+    if (!confirmWithdraw || isSyncing) return;
+    setIsSyncing(true);
     try {
-      const { tailorId, amount } = confirmWithdraw;
-      await db.tabunganWithdrawals.add({
-        tailorId,
-        amount,
-        date: new Date().toISOString(),
-        createdBy: currentUsername,
+      const { tailorId, amount, tailorName } = confirmWithdraw;
+
+      // 1. Add to Archive (Mongo)
+      await db.archiveTabungan.add({
+        originalId: Date.now(), // fallback id
+        data: {
+          tailorId,
+          tailorName,
+          amount,
+          date: new Date().toISOString(),
+          createdBy: currentUsername,
+        },
+        archivedAt: new Date().toISOString(),
+        archivedBy: currentUsername || "System",
       });
+
+      // 2. Update Active Summary in Mongo
+      const existingSummary = activeTabunganMongo.find(
+        (a) => a.tailorId === tailorId
+      );
+      if (existingSummary) {
+        await db.activeTabungan.update(existingSummary.id!, {
+          totalOut: (existingSummary.totalOut || 0) + amount,
+          balance: existingSummary.balance - amount,
+          lastUpdated: new Date().toISOString(),
+        });
+      }
+
       setConfirmWithdraw(null);
+      alert("Pencairan tabungan berhasil diproses ke database.");
     } catch (err) {
+      console.error(err);
       alert("Terjadi kesalahan saat mencairkan tabungan.");
+    } finally {
+      setIsSyncing(false);
     }
   }
 
   async function handleDeleteWithdrawal(id: number) {
     if (
       confirm(
-        "Hapus histori pencairan ini? Saldo akan kembali ke tabungan penjahit."
+        "Hapus histori pencairan ini? Saldo akan kembali ke tabungan penjahit (Manual adjustment recommended)."
       )
     ) {
-      await db.tabunganWithdrawals.delete(id);
+      const arc = archiveTabungan.find(
+        (a) => a.id === id || a.originalId === id
+      );
+      if (arc) {
+        await db.archiveTabungan.delete(arc.id!);
+
+        // We should also revert the summary
+        const existingSummary = activeTabunganMongo.find(
+          (a) => a.tailorId === arc.data.tailorId
+        );
+        if (existingSummary) {
+          await db.activeTabungan.update(existingSummary.id!, {
+            totalOut: Math.max(
+              0,
+              (existingSummary.totalOut || 0) - arc.data.amount
+            ),
+            balance: existingSummary.balance + arc.data.amount,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+      }
     }
   }
 
@@ -116,7 +154,10 @@ export default function TabunganView({
     );
   };
 
-  const totalTabunganVolume = balances.reduce((sum, b) => sum + b.balance, 0);
+  const totalTabunganVolume = activeTabunganMongo.reduce(
+    (sum, b) => sum + b.balance,
+    0
+  );
 
   return (
     <div className="space-y-10 pb-24">
@@ -130,7 +171,7 @@ export default function TabunganView({
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3 w-full lg:w-auto">
           <div className="relative w-full sm:w-80 group">
             <Search
               size={18}
@@ -149,7 +190,11 @@ export default function TabunganView({
             onClick={() => setShowAmountsGlobal(!showAmountsGlobal)}
             className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-sm border ${showAmountsGlobal ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}
           >
-            {showAmountsGlobal ? <EyeOff size={18} /> : <Eye size={18} />}
+            {showAmountsGlobal ? (
+              <EyeOff size={18} className="inline mr-2" />
+            ) : (
+              <Eye size={18} className="inline mr-2" />
+            )}
             {showAmountsGlobal ? "Masking" : "Buka Masking"}
           </button>
         </div>
@@ -166,7 +211,7 @@ export default function TabunganView({
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-              Total Tabungan Penjahit Terkumpul
+              Total Tabungan Terkumpul
             </p>
             <h3 className="text-3xl font-black text-slate-900 tabular-nums">
               Rp {totalTabunganVolume.toLocaleString("id-ID")}
@@ -207,6 +252,65 @@ export default function TabunganView({
         </motion.div>
       </div>
 
+      {/* ACTIVE SAVINGS SUMMARY TABLE */}
+      <div className="bg-white border-2 border-slate-100 rounded-[2.5rem] overflow-hidden shadow-sm">
+        <div className="p-8 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={20} className="text-indigo-600" />
+            <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">
+              Status Tabungan Aktif
+            </h4>
+          </div>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Table MongoDB: activeTabungan
+          </span>
+        </div>
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead className="bg-slate-50/50 border-b border-slate-100 font-bold text-slate-500 uppercase tracking-widest text-[9px]">
+              <tr>
+                <th className="px-8 py-4">Penjahit</th>
+                <th className="px-8 py-4 text-emerald-600 text-center">
+                  Masuk
+                </th>
+                <th className="px-8 py-4 text-rose-600 text-center">Keluar</th>
+                <th className="px-8 py-4 text-right">Saldo Saat Ini</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {activeTabunganMongo
+                .filter((b) => b.totalIn > 0)
+                .map((b) => (
+                  <tr
+                    key={b.tailorId}
+                    className="hover:bg-slate-50/30 transition-colors"
+                  >
+                    <td className="px-8 py-4">
+                      <div className="font-black text-slate-900 uppercase">
+                        {b.tailorName}
+                      </div>
+                      <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                        Member Data (Cloud)
+                      </div>
+                    </td>
+                    <td className="px-8 py-4 text-center font-bold text-emerald-600 tabular-nums">
+                      {displayAmount(b.totalIn, b.tailorId!, "text-[11px]")}
+                    </td>
+                    <td className="px-8 py-4 text-center font-bold text-rose-500 tabular-nums">
+                      {displayAmount(b.totalOut, b.tailorId!, "text-[11px]")}
+                    </td>
+                    <td className="px-8 py-4 text-right">
+                      <div className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl inline-block font-black tabular-nums border border-indigo-100 shadow-sm">
+                        {displayAmount(b.balance, b.tailorId!, "text-sm")}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="space-y-6">
         <h3 className="text-xl font-black text-slate-900 px-2 flex items-center gap-3">
           <div className="w-1.5 h-6 bg-slate-900 rounded-full"></div> Saldo
@@ -221,12 +325,12 @@ export default function TabunganView({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                key={b.tailor.id}
+                key={b.tailorId}
                 className="bg-white border-2 border-slate-50 rounded-[2.5rem] p-8 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all group relative flex flex-col"
               >
                 <div className="flex justify-between items-start mb-6">
                   <div className="w-14 h-14 bg-slate-50 border border-slate-100 rounded-[1.25rem] flex items-center justify-center text-indigo-600 font-black text-xl group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
-                    {b.tailor.name.charAt(0)}
+                    {b.tailorName.charAt(0)}
                   </div>
                   {(userRole === "super_admin" ||
                     userRole === "superadmin" ||
@@ -235,9 +339,9 @@ export default function TabunganView({
                       type="button"
                       onClick={() =>
                         setConfirmWithdraw({
-                          tailorId: b.tailor.id!,
+                          tailorId: b.tailorId!,
                           amount: b.balance,
-                          tailorName: b.tailor.name,
+                          tailorName: b.tailorName,
                         })
                       }
                       className="bg-slate-900 text-white p-3 rounded-2xl shadow-xl shadow-slate-900/10 hover:bg-rose-600 transition-all active:scale-95 translate-x-4 -translate-y-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0"
@@ -250,12 +354,10 @@ export default function TabunganView({
 
                 <div className="flex-1">
                   <h4 className="text-xl font-black text-slate-900 tracking-tight leading-none mb-1 group-hover:text-indigo-600 transition-colors uppercase">
-                    {b.tailor.name}
+                    {b.tailorName}
                   </h4>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                    {b.tailor.partnerName
-                      ? `Berdua: ${b.tailor.partnerName}`
-                      : "Produksi Mandiri"}
+                    Active Balance (Cloud)
                   </p>
                 </div>
 
@@ -265,14 +367,14 @@ export default function TabunganView({
                     <span>
                       {displayAmount(
                         b.totalIn,
-                        b.tailor.id!,
+                        b.tailorId!,
                         "text-[8px] font-bold text-slate-300"
                       )}{" "}
                       total in
                     </span>
                   </p>
                   <div className="text-3xl font-black text-slate-900 tabular-nums tracking-tighter">
-                    {displayAmount(b.balance, b.tailor.id!, "text-indigo-600")}
+                    {displayAmount(b.balance, b.tailorId!, "text-indigo-600")}
                   </div>
                 </div>
               </motion.div>
@@ -313,7 +415,7 @@ export default function TabunganView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {withdrawals.length === 0 ? (
+              {archivedWithdrawals.length === 0 ? (
                 <tr>
                   <td
                     colSpan={4}
@@ -323,42 +425,36 @@ export default function TabunganView({
                   </td>
                 </tr>
               ) : (
-                withdrawals.map((w) => {
-                  const tailor = tailors.find((t) => t.id === w.tailorId);
+                archivedWithdrawals.map((arc) => {
+                  const w = arc.data;
                   return (
                     <tr
-                      key={w.id}
+                      key={arc.id}
                       className="hover:bg-slate-50/50 transition-colors group"
                     >
                       <td className="px-8 py-6">
                         <div className="font-black text-slate-900 text-sm">
-                          {new Date(w.date).toLocaleDateString("id-ID", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}
+                          {new Date(arc.archivedAt).toLocaleDateString(
+                            "id-ID",
+                            { day: "numeric", month: "long", year: "numeric" }
+                          )}
                         </div>
                         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                          {new Date(w.date).toLocaleTimeString("id-ID", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                          {w.createdBy && (
+                          {new Date(arc.archivedAt).toLocaleTimeString(
+                            "id-ID",
+                            { hour: "2-digit", minute: "2-digit" }
+                          )}
+                          {arc.archivedBy && (
                             <span className="ml-2 text-indigo-300 italic opacity-60">
-                              By: {w.createdBy}
+                              By: {arc.archivedBy}
                             </span>
                           )}
                         </div>
                       </td>
                       <td className="px-8 py-6">
                         <div className="font-black text-slate-800 uppercase tracking-tight">
-                          {tailor ? tailor.name : "Unknown"}
+                          {w.tailorName || "Unknown"}
                         </div>
-                        {tailor?.partnerName && (
-                          <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mt-1">
-                            & {tailor.partnerName}
-                          </div>
-                        )}
                       </td>
                       <td className="px-8 py-6 text-right font-black text-rose-500 tabular-nums text-lg">
                         Rp {w.amount.toLocaleString("id-ID")}
@@ -368,7 +464,7 @@ export default function TabunganView({
                           userRole === "superadmin" ||
                           userRole === "admin") && (
                           <button
-                            onClick={() => handleDeleteWithdrawal(w.id!)}
+                            onClick={() => handleDeleteWithdrawal(arc.id!)}
                             className="p-3 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-slate-50 hover:border-rose-100 bg-white"
                             title="Pembatalan Pencairan"
                           >
@@ -439,9 +535,14 @@ export default function TabunganView({
                   </button>
                   <button
                     onClick={handleWithdraw}
+                    disabled={isSyncing}
                     className="flex-1 bg-rose-600 text-white font-black uppercase tracking-widest py-4 rounded-[1.5rem] hover:bg-slate-900 transition-all shadow-xl shadow-rose-600/10 flex items-center justify-center gap-2 text-xs active:scale-95"
                   >
-                    Ya, Cairkan Sekarang
+                    {isSyncing ? (
+                      <TrendingUp size={18} className="animate-spin" />
+                    ) : (
+                      "Ya, Cairkan Sekarang"
+                    )}
                   </button>
                 </div>
               </div>
