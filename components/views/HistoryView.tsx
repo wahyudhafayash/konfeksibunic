@@ -49,6 +49,7 @@ export default function HistoryView() {
   const [selectedArchiveInfo, setSelectedArchiveInfo] = useState<any>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const printRef = useRef<HTMLDivElement>(null);
 
   const tailors = useLiveQuery(() => db.tailors.toArray(), []) || [];
   const poItems = useLiveQuery(() => db.poItems.toArray(), []) || [];
