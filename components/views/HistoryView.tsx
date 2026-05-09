@@ -54,6 +54,8 @@ export default function HistoryView() {
   const tailors = useLiveQuery(() => db.tailors.toArray(), []) || [];
   const poItems = useLiveQuery(() => db.poItems.toArray(), []) || [];
   const pos = useLiveQuery(() => db.pos.toArray(), []) || [];
+  const subs = useLiveQuery(() => db.sewingSubmissions.toArray(), []) || [];
+  const jobs = useLiveQuery(() => db.sewingJobs.toArray(), []) || [];
   const logs =
     useLiveQuery(() => db.appLogs.orderBy("date").reverse().toArray(), []) ||
     [];
@@ -288,6 +290,21 @@ export default function HistoryView() {
     } catch (e) {
       return dateStr;
     }
+  };
+
+  const getJobDetailsById = (jobId: number) => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return { itemInfo: "Unknown", wage: 0, tabungan: 0 };
+    const item = poItems.find((i) => i.id === job.poItemId);
+    const po = item ? pos.find((p) => p.id === item.poId) : null;
+    return {
+      poNumber: po?.poNumber || "Unknown PO",
+      itemInfo: item
+        ? `${item.itemName} (${item.color}, ${item.size})`
+        : "Unknown",
+      wage: job.wagePerPcs,
+      tabungan: job.tabunganPerPcs || 0,
+    };
   };
 
   function getPoItemLabel(poItemId: number) {
@@ -575,93 +592,168 @@ export default function HistoryView() {
                   },
                   {} as Record<string, any[]>
                 )
-              ).map(([name, itemsInGroup]) => (
-                <div key={name} className="space-y-6">
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3 px-2">
-                    <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>{" "}
-                    {name}
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {itemsInGroup.map((item) => {
-                      const sal = item;
-                      const arc = item.archiveInfo;
-                      return (
-                        <motion.div
-                          variants={itemVariants}
-                          key={arc.id}
-                          onClick={() => {
-                            setSelectedSalary(sal);
-                            setSelectedArchiveInfo(arc);
-                          }}
-                          className="bg-white border-2 border-slate-50 rounded-[2.5rem] p-8 shadow-sm hover:border-indigo-100 hover:shadow-md transition-all cursor-pointer group"
+              ).map(([name, allItemsInGroup]) => {
+                const isSpecificTailor = selectedTailorId !== null;
+                const itemsInGroup = isSpecificTailor
+                  ? allItemsInGroup
+                  : allItemsInGroup.slice(0, 3);
+                const hasMore = allItemsInGroup.length > 3 && !isSpecificTailor;
+                const groupTailorId = allItemsInGroup[0].tailorId;
+
+                return (
+                  <div key={name} className="space-y-6">
+                    <div className="flex justify-between items-center px-2">
+                      <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                        <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>{" "}
+                        {name}
+                      </h3>
+                      {hasMore && (
+                        <button
+                          onClick={() => setSelectedTailorId(groupTailorId)}
+                          className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline flex items-center gap-1 group"
                         >
-                          <div className="flex justify-between items-start mb-6">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
-                                  Data Terarsip: {formatDate(arc.archivedAt)}
+                          Lihat semua riwayat {name}
+                          <ArrowRight
+                            size={14}
+                            className="group-hover:translate-x-1 transition-transform"
+                          />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {itemsInGroup.map((item) => {
+                        const sal = item;
+                        const arc = item.archiveInfo;
+                        return (
+                          <motion.div
+                            variants={itemVariants}
+                            key={arc.id}
+                            onClick={() => {
+                              setSelectedSalary(sal);
+                              setSelectedArchiveInfo(arc);
+                            }}
+                            className="bg-white border-2 border-slate-50 rounded-[2.5rem] p-8 shadow-sm hover:border-indigo-100 hover:shadow-md transition-all cursor-pointer group"
+                          >
+                            <div className="flex justify-between items-start mb-6">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
+                                    Data Terarsip: {formatDate(arc.archivedAt)}
+                                  </p>
+                                </div>
+                                <h4 className="font-black text-slate-900 text-lg uppercase tracking-tight">
+                                  Slip #{arc.originalId}
+                                </h4>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+                                  Oleh: {arc.archivedBy}
                                 </p>
                               </div>
-                              <h4 className="font-black text-slate-900 text-lg uppercase tracking-tight">
-                                Slip #{arc.originalId}
-                              </h4>
-                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
-                                Oleh: {arc.archivedBy}
-                              </p>
+                              <div className="bg-indigo-50 text-indigo-500 p-2.5 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                <Wallet size={20} />
+                              </div>
                             </div>
-                            <div className="bg-indigo-50 text-indigo-500 p-2.5 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                              <Wallet size={20} />
-                            </div>
-                          </div>
 
-                          <div className="space-y-4 mb-8">
-                            <div className="flex justify-between items-center bg-slate-50/50 px-4 py-2.5 rounded-xl">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                Qty Setor
-                              </span>
-                              <span className="text-sm font-black text-slate-700 tabular-nums">
-                                {sal.totalQty} PCS
-                              </span>
+                            <div className="space-y-3 mb-8">
+                              <div className="flex justify-between items-center bg-slate-50/50 px-4 py-2.5 rounded-xl">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                  Qty Setor
+                                </span>
+                                <span className="text-sm font-black text-slate-700 tabular-nums">
+                                  {sal.totalQty} PCS
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-slate-400">
+                                  Upah Bruto
+                                </span>
+                                <span className="font-black text-slate-700">
+                                  {displayAmount(
+                                    sal.totalWage,
+                                    `arc_sal_wage_${arc.id}`
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-slate-400">
+                                  Bonus Grade
+                                </span>
+                                <span className="font-black text-emerald-600">
+                                  +
+                                  {displayAmount(
+                                    sal.bonusAmount || 0,
+                                    `arc_sal_bonus_${arc.id}`
+                                  )}
+                                </span>
+                              </div>
+                              {!!sal.manualAdjustment && (
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-slate-400">
+                                    Penyesuaian
+                                  </span>
+                                  <span
+                                    className={`font-black ${sal.manualAdjustment > 0 ? "text-emerald-600" : "text-rose-600"}`}
+                                  >
+                                    {sal.manualAdjustment > 0 ? "+" : ""}
+                                    {displayAmount(
+                                      sal.manualAdjustment,
+                                      `arc_sal_manual_${arc.id}`
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-slate-400">
+                                  Potong Kasbon
+                                </span>
+                                <span className="font-black text-rose-600">
+                                  -
+                                  {displayAmount(
+                                    sal.kasbonDeducted || 0,
+                                    `arc_sal_kasbon_${arc.id}`
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-slate-400">
+                                  Tabungan
+                                </span>
+                                <span className="font-black text-sky-600">
+                                  {displayAmount(
+                                    sal.tabunganAccumulated || 0,
+                                    `arc_sal_tabungan_${arc.id}`
+                                  )}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-bold text-slate-400">
-                                Upah Bruto
-                              </span>
-                              <span className="font-black text-slate-700">
-                                {displayAmount(
-                                  sal.totalWage,
-                                  `arc_sal_wage_${arc.id}`
-                                )}
-                              </span>
-                            </div>
-                          </div>
 
-                          <div className="pt-6 border-t-2 border-slate-50 flex justify-between items-end">
-                            <div>
-                              <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">
-                                Diterima
-                              </p>
-                              <p className="text-2xl font-black text-indigo-600 tabular-nums leading-none">
-                                {displayAmount(
-                                  sal.netPayment,
-                                  `arc_sal_net_${arc.id}`
-                                )}
-                              </p>
+                            <div className="pt-6 border-t-2 border-slate-50 flex justify-between items-end">
+                              <div>
+                                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">
+                                  Diterima
+                                </p>
+                                <p className="text-2xl font-black text-indigo-600 tabular-nums leading-none">
+                                  {displayAmount(
+                                    sal.netPayment,
+                                    `arc_sal_net_${arc.id}`
+                                  )}
+                                </p>
+                              </div>
+                              <ArrowRight
+                                size={20}
+                                className="text-slate-300 group-hover:text-indigo-600 transition-colors group-hover:translate-x-1 transition-transform"
+                              />
                             </div>
-                            <ArrowRight
-                              size={20}
-                              className="text-slate-300 group-hover:text-indigo-600 transition-colors group-hover:translate-x-1 transition-transform"
-                            />
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                          </motion.div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
+
         {activeTab === "tabungan" && (
           <div className="space-y-12">
             {currentTabungan.length === 0 ? (
@@ -1197,7 +1289,7 @@ export default function HistoryView() {
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 50 }}
-              className="bg-white rounded-[3rem] shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden"
+              className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden"
             >
               <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <div className="flex items-center gap-5">
@@ -1256,153 +1348,129 @@ export default function HistoryView() {
                       KONFEKSI APP
                     </h1>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
-                      Official Remuneration Slip
+                      Official Detailed Pay Statement
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-8 border-y-2 border-slate-50 border-dashed py-8">
-                    <div>
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">
-                        Nama Pekerja
-                      </p>
-                      <p className="font-black text-slate-900 tracking-tight text-lg uppercase">
-                        {getTailorName(selectedSalary.tailorId)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">
-                        Tanggal Transaksi
-                      </p>
-                      <p className="font-bold text-slate-700">
-                        {formatDate(selectedSalary.date)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center group">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          Upah Borongan
-                        </span>
-                        <span className="text-[9px] font-bold text-slate-300">
-                          {selectedSalary.totalQty} PCS Dikerjakan
-                        </span>
-                      </div>
-                      <span className="text-lg font-black text-slate-900 tabular-nums">
-                        {displayAmount(
-                          selectedSalary.totalWage,
-                          `psw_${selectedSalary.id}`
-                        )}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-emerald-600">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                          Bonus Grade Produksi
-                        </span>
-                        <span className="text-[9px] font-bold opacity-60">
-                          Level: {selectedSalary.gradeName}
-                        </span>
-                      </div>
-                      <span className="text-lg font-black tabular-nums">
-                        +
-                        {displayAmount(
-                          selectedSalary.bonusAmount,
-                          `psb_${selectedSalary.id}`
-                        )}
-                      </span>
-                    </div>
-
-                    {selectedSalary.manualAdjustment !== 0 && (
-                      <div
-                        className={`flex justify-between items-center ${selectedSalary.manualAdjustment > 0 ? "text-purple-600" : "text-rose-500"}`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-black uppercase tracking-widest">
-                            Penyesuaian Manual
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
+                    <div className="space-y-6">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">
+                        Rincian Pembayaran
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-bold text-slate-500">
+                            Upah Borongan ({selectedSalary.totalQty} PCS)
                           </span>
-                          <span className="text-[9px] font-bold opacity-60">
-                            {selectedSalary.manualNote || "Adjustment"}
+                          <span className="font-black text-slate-900">
+                            {displayAmount(selectedSalary.totalWage, "m_w")}
                           </span>
                         </div>
-                        <span className="text-lg font-black tabular-nums font-mono">
-                          {selectedSalary.manualAdjustment > 0 ? "+" : ""}
-                          {displayAmount(
-                            selectedSalary.manualAdjustment,
-                            `psa_${selectedSalary.id}`
-                          )}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between items-center text-rose-500 py-4 border-t border-slate-50 border-dashed">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                          Pelunasan Kasbon
-                        </span>
-                        <span className="text-[9px] font-bold opacity-60">
-                          Automatic Deduction
-                        </span>
-                      </div>
-                      <span className="text-lg font-black tabular-nums">
-                        -
-                        {displayAmount(
-                          selectedSalary.kasbonDeducted,
-                          `psk_${selectedSalary.id}`
+                        <div className="flex justify-between items-center text-emerald-600 text-sm">
+                          <span className="font-black uppercase tracking-tight italic">
+                            Bonus Grade
+                          </span>
+                          <span className="font-black">
+                            +
+                            {displayAmount(
+                              selectedSalary.bonusAmount || 0,
+                              "m_b"
+                            )}
+                          </span>
+                        </div>
+                        {!!selectedSalary.manualAdjustment && (
+                          <div
+                            className={`flex justify-between items-center text-sm ${selectedSalary.manualAdjustment > 0 ? "text-emerald-600" : "text-rose-600"}`}
+                          >
+                            <span className="font-black uppercase tracking-tight italic">
+                              Penyesuaian
+                            </span>
+                            <span className="font-black">
+                              {selectedSalary.manualAdjustment > 0 ? "+" : ""}
+                              {displayAmount(
+                                selectedSalary.manualAdjustment,
+                                "m_ma"
+                              )}
+                            </span>
+                          </div>
                         )}
-                      </span>
+                        <div className="flex justify-between items-center text-rose-600 text-sm">
+                          <span className="font-black uppercase tracking-tight italic">
+                            Potong Kasbon
+                          </span>
+                          <span className="font-black">
+                            -
+                            {displayAmount(
+                              selectedSalary.kasbonDeducted || 0,
+                              "m_k"
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sky-600 text-sm">
+                          <span className="font-black uppercase tracking-tight italic">
+                            Tabungan
+                          </span>
+                          <span className="font-black">
+                            {displayAmount(
+                              selectedSalary.tabunganAccumulated || 0,
+                              "m_t"
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-end pt-5 border-t-2 border-slate-100 mt-2">
+                          <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none">
+                            Netto
+                          </span>
+                          <span className="text-2xl font-black text-indigo-600 tabular-nums leading-none tracking-tighter">
+                            {displayAmount(selectedSalary.netPayment, "m_n")}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="pt-6 border-t-2 border-slate-50 flex justify-between items-end">
-                      <div>
-                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em] mb-1">
-                          Diterima Bersih
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-300">
-                          Net Take Home Pay
-                        </p>
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">
+                        Rincian Pekerjaan
+                      </h4>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {subs
+                          .filter(
+                            (s) =>
+                              s.paymentId ===
+                              (selectedArchiveInfo?.originalId ||
+                                selectedSalary.id)
+                          )
+                          .map((s) => {
+                            const job = getJobDetailsById(s.jobId);
+                            return (
+                              <div
+                                key={s.id}
+                                className="bg-slate-50 rounded-xl p-3 border border-slate-100/50"
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="text-left">
+                                    <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">
+                                      #{job.poNumber}
+                                    </p>
+                                    <h5 className="text-[10px] font-bold text-slate-800 uppercase leading-tight line-clamp-1">
+                                      {job.itemInfo}
+                                    </h5>
+                                  </div>
+                                  <p className="text-[10px] font-black text-slate-900">
+                                    Rp {s.wageTotal.toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
-                      <p className="text-4xl font-black text-indigo-600 tabular-nums tracking-tighter shadow-sm">
-                        {displayAmount(
-                          selectedSalary.netPayment,
-                          `psn_${selectedSalary.id}`
-                        )}
-                      </p>
                     </div>
                   </div>
 
-                  {selectedSalary.tabunganAccumulated > 0 && (
-                    <div className="bg-sky-50 border-2 border-sky-100 rounded-[2rem] p-5 flex justify-between items-center">
-                      <span className="text-[10px] font-black text-sky-800 uppercase tracking-widest flex items-center gap-2">
-                        <PiggyBank size={16} /> Iuran Tabungan Penjahit
-                      </span>
-                      <span className="font-black text-sky-700 text-lg tabular-nums">
-                        +
-                        {displayAmount(
-                          selectedSalary.tabunganAccumulated,
-                          `pst_${selectedSalary.id}`
-                        )}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="pt-12 mt-12 border-t-2 border-slate-50 hidden print:block">
-                    <div className="flex justify-between">
-                      <div className="text-center w-40">
-                        <p className="text-[9px] font-black uppercase tracking-widest mb-16">
-                          Finance,
-                        </p>
-                        <div className="w-full border-b border-slate-200"></div>
-                      </div>
-                      <div className="text-center w-40">
-                        <p className="text-[9px] font-black uppercase tracking-widest mb-16">
-                          Penerima,
-                        </p>
-                        <div className="w-full border-b border-slate-200"></div>
-                      </div>
-                    </div>
+                  <div className="pt-12 mt-12 border-t-2 border-slate-50 hidden print:block text-center">
+                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest italic tracking-[0.2em]">
+                      Dokumen ini diterbitkan secara digital oleh KonfeksiApp
+                      Manajemen &copy; {new Date().getFullYear()}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1640,9 +1708,7 @@ export default function HistoryView() {
                           const progress = Math.round(
                             (j.qtySubmitted / j.qtyTaken) * 100
                           );
-                          const jobSubs = submissions.filter(
-                            (s) => s.jobId === j.id
-                          );
+                          const jobSubs = subs.filter((s) => s.jobId === j.id);
                           const totallyPaid =
                             jobSubs.length > 0 &&
                             jobSubs.every((s) => s.isPaid);

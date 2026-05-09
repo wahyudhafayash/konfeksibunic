@@ -140,7 +140,10 @@ export default function SalaryView({
       0
     );
 
-    const netPayment = totalWage + bonus - totalKasbon + totalAdjustment;
+    const netPayment = Math.max(
+      0,
+      totalWage + bonus - totalKasbon + totalAdjustment
+    );
 
     return {
       totalQty,
@@ -251,11 +254,6 @@ export default function SalaryView({
     }
   }
 
-  const unpaidTotalAll = unpaidSubs.reduce(
-    (acc, curr) => acc + (Number(curr.wageTotal) || 0),
-    0
-  );
-
   const groupedUnpaidSubsRaw = unpaidSubs.reduce(
     (acc, sub) => {
       if (!acc[sub.tailorId]) acc[sub.tailorId] = [];
@@ -263,6 +261,14 @@ export default function SalaryView({
       return acc;
     },
     {} as Record<number, SewingSubmission[]>
+  );
+
+  const unpaidTotalAll = Object.entries(groupedUnpaidSubsRaw).reduce(
+    (acc, [tailorIdStr, subs]) => {
+      const stats = calculateTailorStats(Number(tailorIdStr), subs);
+      return acc + stats.netPayment;
+    },
+    0
   );
 
   const matchedTailors = tailors
