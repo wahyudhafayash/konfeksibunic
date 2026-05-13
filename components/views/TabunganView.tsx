@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { db, useLiveQuery, TabunganWithdrawal } from "@/lib/db";
+import { useState } from "react";
+import { db, useLiveQuery } from "@/lib/db";
 import {
   PiggyBank,
   Search,
@@ -11,10 +11,6 @@ import {
   ArrowUpRight,
   TrendingUp,
   Info,
-  X,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -250,65 +246,6 @@ export default function TabunganView({
             </div>
           </div>
         </motion.div>
-      </div>
-
-      {/* ACTIVE SAVINGS SUMMARY TABLE */}
-      <div className="bg-white border-2 border-slate-100 rounded-[2.5rem] overflow-hidden shadow-sm">
-        <div className="p-8 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 size={20} className="text-indigo-600" />
-            <h4 className="font-black text-slate-900 uppercase text-sm tracking-tight">
-              Status Tabungan Aktif
-            </h4>
-          </div>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            Table MongoDB: activeTabungan
-          </span>
-        </div>
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse text-sm">
-            <thead className="bg-slate-50/50 border-b border-slate-100 font-bold text-slate-500 uppercase tracking-widest text-[9px]">
-              <tr>
-                <th className="px-8 py-4">Penjahit</th>
-                <th className="px-8 py-4 text-emerald-600 text-center">
-                  Masuk
-                </th>
-                <th className="px-8 py-4 text-rose-600 text-center">Keluar</th>
-                <th className="px-8 py-4 text-right">Saldo Saat Ini</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {activeTabunganMongo
-                .filter((b) => b.totalIn > 0)
-                .map((b) => (
-                  <tr
-                    key={b.tailorId}
-                    className="hover:bg-slate-50/30 transition-colors"
-                  >
-                    <td className="px-8 py-4">
-                      <div className="font-black text-slate-900 uppercase">
-                        {b.tailorName}
-                      </div>
-                      <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                        Member Data (Cloud)
-                      </div>
-                    </td>
-                    <td className="px-8 py-4 text-center font-bold text-emerald-600 tabular-nums">
-                      {displayAmount(b.totalIn, b.tailorId!, "text-[11px]")}
-                    </td>
-                    <td className="px-8 py-4 text-center font-bold text-rose-500 tabular-nums">
-                      {displayAmount(b.totalOut, b.tailorId!, "text-[11px]")}
-                    </td>
-                    <td className="px-8 py-4 text-right">
-                      <div className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl inline-block font-black tabular-nums border border-indigo-100 shadow-sm">
-                        {displayAmount(b.balance, b.tailorId!, "text-sm")}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       <div className="space-y-6">
