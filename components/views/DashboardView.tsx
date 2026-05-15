@@ -530,7 +530,7 @@ export default function DashboardView() {
         </motion.div>
 
         <motion.div variants={itemVariants} className="space-y-6">
-          <div className="bg-indigo-600 text-white rounded-[2rem] p-8 shadow-xl shadow-indigo-600/20 relative overflow-hidden h-full flex flex-col justify-between">
+          <div className="bg-indigo-600 text-white rounded-[1.5rem] p-8 shadow-xl shadow-indigo-600/20 relative overflow-hidden h-13 md:mt-11 flex flex-col justify-between">
             <div className="absolute -right-4 -top-4 opacity-15 rotate-12">
               <PiggyBank size={180} />
             </div>
