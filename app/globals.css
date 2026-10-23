@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  /* Compact scaling on HP (mobile) and tablet so UI and fonts are neat and not oversized */
+  html {
+    font-size: 13.5px; /* Compact base for HP */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Tablets up to 1024px */
+  @media (min-width: 640px) and (max-width: 1023px) {
+    html {
+      font-size: 14px; /* Compact base for tablet */
+    }
+  }
+
+  /* Desktop standard */
+  @media (min-width: 1280px) {
+    html {
+      font-size: 15px;
+    }
+  }
+}
+
+body {
+  background-color: #f7f9fb;
+}
+
+/* Custom scrollbar utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+.custom-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+.custom-scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  body {
+    background-color: white;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+.print-only {
+  display: none;
+}
+
